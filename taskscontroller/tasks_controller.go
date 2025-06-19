@@ -5,23 +5,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"taskrunner/model"
+	"taskrunner/model/task"
 	"time"
 )
 
-const (
-	statusExecuting = 1
-	statusCompleted = 2
-)
-
 type TasksController struct {
-	tasks  map[string]model.Task
+	tasks  map[string]task.Task
 	logger *slog.Logger
 }
 
 func New(logger *slog.Logger) *TasksController {
 	return &TasksController{
-		tasks:  make(map[string]model.Task),
+		tasks:  make(map[string]task.Task),
 		logger: logger,
 	}
 }
@@ -43,10 +38,10 @@ func (tc *TasksController) RunTask(w http.ResponseWriter, r *http.Request) {
 
 	tc.logger.Info("created task", "name", taskName)
 
-	result := struct {
-		Name string `json:"task_name"`
-	}{taskName}
-	writeJson(w, result, http.StatusCreated)
+	type response struct {
+		Message string `json:"message"`
+	}
+	writeJson(w, response{fmt.Sprintf("created task %s", taskName)}, http.StatusCreated)
 }
 
 func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
@@ -63,48 +58,50 @@ func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
 func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	taskName := r.PathValue("name")
 
-	task, ok := tc.tasks[taskName]
+	t, ok := tc.tasks[taskName]
 	if !ok {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
 	}
 
-	if task.Status() == statusExecuting {
+	// если задача выполняется в данный момент - останавливаем её
+	if t.Status() == task.StatusExecuting {
 		tc.tasks[taskName].Interrupt <- struct{}{}
-		return
 	}
 
 	delete(tc.tasks, taskName)
+
+	type response struct {
+		Message string `json:"message"`
+	}
+	writeJson(w, response{fmt.Sprintf("task %s deleted", taskName)}, http.StatusOK)
 }
 
 func (tc *TasksController) runTask(name string) error {
-	task := tc.tasks[name]
-
-	// нельзя запускать уже запущенную задачу
-	if task.Status() == statusExecuting {
-		return fmt.Errorf("task %s is already executing", name)
+	// нельзя запускать уже существующую задачу
+	if _, ok := tc.tasks[name]; ok {
+		return fmt.Errorf("task %s already exists", name)
 	}
 
 	go func() {
-		// инициализация задачи
-		task.Name = name
-		task.SetStatus(statusExecuting)
-		task.CreatedAt = time.Now()
-		task.Interrupt = make(chan struct{})
-		defer close(task.Interrupt)
+		t := task.New(name)
+		t.SetStatus(task.StatusExecuting)
+		defer close(t.Interrupt)
 
-		// т.к. нельзя напрямую изменять значение в мапе, приходится присваивать изменённую копию
-		tc.tasks[name] = task
+		tc.logger.Debug("creating new task", "name", t.Name, "createdAd", t.CreatedAt, "status", t.StatusText)
+
+		tc.tasks[name] = t
 
 		select {
-		case <-task.Interrupt:
-			tc.logger.Info("task interrupted", "name", task.Name)
+		case <-t.Interrupt:
+			tc.logger.Info("task interrupted", "name", t.Name)
 			delete(tc.tasks, name)
+			return
 
 		case <-time.After(time.Second * 15):
-			tc.logger.Info("task completed", "name", task.Name)
-			task.SetStatus(statusCompleted)
-			tc.tasks[name] = task // обновление статуса в мапе
+			tc.logger.Info("task completed", "name", t.Name)
+			t.SetStatus(task.StatusCompleted)
+			tc.tasks[name] = t // после обновления статуса в структуре необходимо также обновить его в мапе
 		}
 	}()
 
