@@ -8,25 +8,17 @@ import (
 	"time"
 )
 
-const (
-	statusExecuting = 1
-	statusCompleted = 2
-)
-
 var statusText [3]string = [3]string{"none", "executing", "completed"}
 
 type TasksController struct {
-	status    map[string]int
-	interrupt map[string]chan struct{}
-
+	tasks  map[string]task
 	logger *slog.Logger
 }
 
 func New(logger *slog.Logger) *TasksController {
 	return &TasksController{
-		status:    make(map[string]int),
-		interrupt: make(map[string]chan struct{}),
-		logger:    logger,
+		tasks:  make(map[string]task),
+		logger: logger,
 	}
 }
 
@@ -55,7 +47,7 @@ func (tc *TasksController) RunTask(w http.ResponseWriter, r *http.Request) {
 
 func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
 	taskName := r.PathValue("name")
-	status, ok := tc.status[taskName]
+	task, ok := tc.tasks[taskName]
 	if !ok {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
@@ -67,54 +59,52 @@ func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
 	}{}
 
 	result.Name = taskName
-	result.Status = statusText[status]
+	result.Status = statusText[task.Status]
 	writeJson(w, result, http.StatusOK)
 }
 
 func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	taskName := r.PathValue("name")
 
-	status, ok := tc.status[taskName]
+	task, ok := tc.tasks[taskName]
 	if !ok {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
 	}
 
-	if status == statusExecuting {
-		tc.interrupt[taskName] <- struct{}{}
+	if task.Status == statusExecuting {
+		tc.tasks[taskName].Interrupt <- struct{}{}
 		return
 	}
 
-	tc.deleteTask(taskName)
-	fmt.Println(tc.status)
+	delete(tc.tasks, taskName)
 }
 
 func (tc *TasksController) runTask(name string) error {
+	task := tc.tasks[name]
 	// нельзя запускать уже запущенную задачу
-	if tc.status[name] == statusExecuting {
+	if task.Status == statusExecuting {
 		return fmt.Errorf("task %s is already executing", name)
 	}
 
 	go func() {
-		tc.status[name] = statusExecuting
-		tc.interrupt[name] = make(chan struct{})
+		task.Status = statusExecuting
+		task.Interrupt = make(chan struct{})
+		defer close(task.Interrupt)
+
+		tc.tasks[name] = task
 
 		// либо задача успешно выполняется, либо её останавливают
 		select {
-		case <-tc.interrupt[name]:
-			tc.deleteTask(name)
+		case <-task.Interrupt:
+			delete(tc.tasks, name)
 		case <-time.After(time.Second * 15):
-			tc.status[name] = statusCompleted
+			task.Status = statusCompleted
+			tc.tasks[name] = task
 		}
 	}()
 
 	return nil
-}
-
-func (tc *TasksController) deleteTask(name string) {
-	close(tc.interrupt[name])
-	delete(tc.interrupt, name)
-	delete(tc.status, name)
 }
 
 func writeJson(w http.ResponseWriter, obj any, statusCode int) {
