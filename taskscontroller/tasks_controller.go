@@ -10,21 +10,21 @@ import (
 )
 
 type TasksController struct {
-	tasks  map[string]task.Task
+	tasks  map[string]*task.Task
 	logger *slog.Logger
 }
 
 func New(logger *slog.Logger) *TasksController {
 	return &TasksController{
-		tasks:  make(map[string]task.Task),
+		tasks:  make(map[string]*task.Task),
 		logger: logger,
 	}
 }
 
 func (tc *TasksController) RegisterEndpoints(mux *http.ServeMux) {
-	mux.HandleFunc("POST /task/{name}/run", tc.RunTask)
-	mux.HandleFunc("GET /task/{name}/status", tc.TaskStatus)
-	mux.HandleFunc("DELETE /task/{name}/rm", tc.DeleteTask)
+	mux.HandleFunc(" /task/{name}/run", tc.RunTask)
+	mux.HandleFunc(" /task/{name}/status", tc.TaskStatus)
+	mux.HandleFunc(" /task/{name}/rm", tc.DeleteTask)
 }
 
 // HTTP POST /task/{name}/run
@@ -46,13 +46,13 @@ func (tc *TasksController) RunTask(w http.ResponseWriter, r *http.Request) {
 
 func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
 	taskName := r.PathValue("name")
-	task, ok := tc.tasks[taskName]
+	t, ok := tc.tasks[taskName]
 	if !ok {
 		http.Error(w, "task not found", http.StatusNotFound)
 		return
 	}
 
-	writeJson(w, task, http.StatusOK)
+	writeJson(w, t.Dto(), http.StatusOK)
 }
 
 func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +66,8 @@ func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
 
 	// если задача выполняется в данный момент - останавливаем её
 	if t.Status() == task.StatusExecuting {
-		tc.tasks[taskName].Interrupt <- struct{}{}
+		t.Interrupt <- struct{}{}
 	}
-
 	delete(tc.tasks, taskName)
 
 	type response struct {
@@ -84,24 +83,22 @@ func (tc *TasksController) runTask(name string) error {
 	}
 
 	go func() {
-		t := task.New(name)
+		tc.tasks[name] = task.New(name)
+		t := tc.tasks[name]
+
 		t.SetStatus(task.StatusExecuting)
 		defer close(t.Interrupt)
 
 		tc.logger.Debug("creating new task", "name", t.Name, "createdAd", t.CreatedAt, "status", t.StatusText)
 
-		tc.tasks[name] = t
-
 		select {
 		case <-t.Interrupt:
 			tc.logger.Info("task interrupted", "name", t.Name)
-			delete(tc.tasks, name)
 			return
 
 		case <-time.After(time.Second * 15):
 			tc.logger.Info("task completed", "name", t.Name)
 			t.SetStatus(task.StatusCompleted)
-			tc.tasks[name] = t // после обновления статуса в структуре необходимо также обновить его в мапе
 		}
 	}()
 
