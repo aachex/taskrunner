@@ -27,9 +27,9 @@ func New(logger *slog.Logger) *TasksController {
 }
 
 func (tc *TasksController) RegisterEndpoints(mux *http.ServeMux) {
-	mux.HandleFunc("/task/{name}/run", tc.RunTask)
-	mux.HandleFunc("/task/{name}/status", tc.TaskStatus)
-	mux.HandleFunc("/task/{name}/rm", tc.DeleteTask)
+	mux.HandleFunc("POST /task/{name}/run", tc.RunTask)
+	mux.HandleFunc("GET /task/{name}/status", tc.TaskStatus)
+	mux.HandleFunc("DELETE /task/{name}/rm", tc.DeleteTask)
 }
 
 // HTTP POST /task/{name}/run
@@ -102,6 +102,7 @@ func (tc *TasksController) runTask(name string) error {
 			delete(tc.tasks, name)
 
 		case <-time.After(time.Second * 15):
+			tc.logger.Info("task completed", "name", task.Name)
 			task.SetStatus(statusCompleted)
 			tc.tasks[name] = task // обновление статуса в мапе
 		}
