@@ -3,13 +3,12 @@ package task
 import "time"
 
 const (
-	StatusAwaiting    = 0
-	StatusExecuting   = 1
-	StatusCompleted   = 2
-	StatusInterrupted = 3
+	StatusAwaiting  = 0
+	StatusExecuting = 1
+	StatusCompleted = 2
 )
 
-var statuses = [4]string{"awaiting", "executing", "completed", "interrupted"}
+var statuses = [3]string{"awaiting", "executing", "completed"}
 
 type Task struct {
 	Name       string    `json:"task_name"`
