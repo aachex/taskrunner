@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"taskrunner/model/task"
 	"time"
@@ -22,9 +23,9 @@ func New(logger *slog.Logger) *TasksController {
 }
 
 func (tc *TasksController) RegisterEndpoints(mux *http.ServeMux) {
-	mux.HandleFunc(" /task/{name}/run", tc.RunTask)
-	mux.HandleFunc(" /task/{name}/status", tc.TaskStatus)
-	mux.HandleFunc(" /task/{name}/rm", tc.DeleteTask)
+	mux.HandleFunc("POST /task/{name}/run", tc.RunTask)
+	mux.HandleFunc("GET /task/{name}/status", tc.TaskStatus)
+	mux.HandleFunc("DELETE /task/{name}/rm", tc.DeleteTask)
 }
 
 // HTTP POST /task/{name}/run
@@ -96,7 +97,7 @@ func (tc *TasksController) runTask(name string) error {
 			tc.logger.Info("task interrupted", "name", t.Name)
 			return
 
-		case <-time.After(time.Second * 15):
+		case <-time.After(time.Minute * time.Duration(rand.Intn(3)+3)):
 			tc.logger.Info("task completed", "name", t.Name)
 			t.SetStatus(task.StatusCompleted)
 		}
