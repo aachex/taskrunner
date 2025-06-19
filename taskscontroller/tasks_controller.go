@@ -5,19 +5,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"taskrunner/model"
 	"time"
 )
 
-var statusText [3]string = [3]string{"none", "executing", "completed"}
+const (
+	statusExecuting = 1
+	statusCompleted = 2
+)
 
 type TasksController struct {
-	tasks  map[string]task
+	tasks  map[string]model.Task
 	logger *slog.Logger
 }
 
 func New(logger *slog.Logger) *TasksController {
 	return &TasksController{
-		tasks:  make(map[string]task),
+		tasks:  make(map[string]model.Task),
 		logger: logger,
 	}
 }
@@ -37,7 +41,7 @@ func (tc *TasksController) RunTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tc.logger.Info("successfully created task", "name", taskName)
+	tc.logger.Info("created task", "name", taskName)
 
 	result := struct {
 		Name string `json:"task_name"`
@@ -53,14 +57,7 @@ func (tc *TasksController) TaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := struct {
-		Name   string `json:"task_name"`
-		Status string `json:"status"`
-	}{}
-
-	result.Name = taskName
-	result.Status = statusText[task.Status]
-	writeJson(w, result, http.StatusOK)
+	writeJson(w, task, http.StatusOK)
 }
 
 func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +69,7 @@ func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if task.Status == statusExecuting {
+	if task.Status() == statusExecuting {
 		tc.tasks[taskName].Interrupt <- struct{}{}
 		return
 	}
@@ -82,25 +79,31 @@ func (tc *TasksController) DeleteTask(w http.ResponseWriter, r *http.Request) {
 
 func (tc *TasksController) runTask(name string) error {
 	task := tc.tasks[name]
+
 	// нельзя запускать уже запущенную задачу
-	if task.Status == statusExecuting {
+	if task.Status() == statusExecuting {
 		return fmt.Errorf("task %s is already executing", name)
 	}
 
 	go func() {
-		task.Status = statusExecuting
+		// инициализация задачи
+		task.Name = name
+		task.SetStatus(statusExecuting)
+		task.CreatedAt = time.Now()
 		task.Interrupt = make(chan struct{})
 		defer close(task.Interrupt)
 
+		// т.к. нельзя напрямую изменять значение в мапе, приходится присваивать изменённую копию
 		tc.tasks[name] = task
 
-		// либо задача успешно выполняется, либо её останавливают
 		select {
 		case <-task.Interrupt:
+			tc.logger.Info("task interrupted", "name", task.Name)
 			delete(tc.tasks, name)
+
 		case <-time.After(time.Second * 15):
-			task.Status = statusCompleted
-			tc.tasks[name] = task
+			task.SetStatus(statusCompleted)
+			tc.tasks[name] = task // обновление статуса в мапе
 		}
 	}()
 
