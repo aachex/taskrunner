@@ -3,21 +3,18 @@ package task
 import "time"
 
 const (
-	StatusAwaiting  = 0
-	StatusExecuting = 1
-	StatusCompleted = 2
+	StatusAwaiting  = "awaiting"
+	StatusExecuting = "executing"
+	StatusCompleted = "completed"
 )
 
-var statuses = [3]string{"awaiting", "executing", "completed"}
-
 type Task struct {
-	Name          string    `json:"task_name"`
-	CreatedAt     time.Time `json:"created_at"`
-	StatusText    string    `json:"status"`
-	executionTime time.Duration
-
+	Name      string    `json:"task_name"`
+	CreatedAt time.Time `json:"created_at"`
 	Interrupt chan struct{}
-	status    int
+
+	executionTime time.Duration
+	status        string
 }
 
 func New(name string) *Task {
@@ -25,8 +22,8 @@ func New(name string) *Task {
 		Name:      name,
 		CreatedAt: time.Now(),
 		Interrupt: make(chan struct{}),
+		status:    StatusAwaiting,
 	}
-	t.SetStatus(StatusAwaiting)
 
 	return t
 }
@@ -34,7 +31,7 @@ func New(name string) *Task {
 // ExecutionTime возвращает время работы задачи. Если задача выполняется, то время работы пересчитывается как time.Since(task.CreatedAt).
 func (t *Task) ExecutionTime() time.Duration {
 	// если задача не завершена, то пересчитываем время работы
-	if t.status == StatusExecuting {
+	if t.Status() == StatusExecuting {
 		t.executionTime = time.Since(t.CreatedAt)
 	}
 	return t.executionTime
@@ -44,16 +41,15 @@ func (t *Task) Dto() Dto {
 	return Dto{
 		Name:          t.Name,
 		CreatedAt:     t.CreatedAt,
-		StatusText:    t.StatusText,
+		Status:        t.Status(),
 		ExecutionTime: t.ExecutionTime(),
 	}
 }
 
-func (t *Task) Status() int {
+func (t *Task) Status() string {
 	return t.status
 }
 
-func (t *Task) SetStatus(status int) {
+func (t *Task) SetStatus(status string) {
 	t.status = status
-	t.StatusText = statuses[status]
 }

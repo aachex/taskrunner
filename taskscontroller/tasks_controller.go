@@ -91,7 +91,7 @@ func (tc *TasksController) runTask(name string) error {
 		t.SetStatus(task.StatusExecuting)
 		defer close(t.Interrupt)
 
-		tc.logger.Debug("creating new task", "name", t.Name, "createdAt", t.CreatedAt, "status", t.StatusText)
+		tc.logger.Debug("creating new task", "name", t.Name, "createdAt", t.CreatedAt, "status", t.Status())
 
 		select {
 		case <-t.Interrupt:
