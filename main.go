@@ -6,7 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"taskrunner/server"
+
+	"github.com/aachex/taskrunner/server"
 )
 
 func main() {

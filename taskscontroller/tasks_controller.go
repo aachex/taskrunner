@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
-	"taskrunner/model/task"
 	"time"
+
+	"github.com/aachex/taskrunner/model/task"
 )
 
 type TasksController struct {

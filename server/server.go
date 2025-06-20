@@ -4,7 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"taskrunner/taskscontroller"
+
+	"github.com/aachex/taskrunner/taskscontroller"
 )
 
 type Server struct {
