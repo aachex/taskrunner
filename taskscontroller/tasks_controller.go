@@ -96,6 +96,7 @@ func (tc *TasksController) runTask(name string) error {
 		select {
 		case <-t.Interrupt:
 			tc.logger.Info("task interrupted", "name", t.Name)
+			delete(tc.tasks, name)
 			return
 
 		case <-time.After(time.Minute * time.Duration(rand.Intn(3)+3)):
