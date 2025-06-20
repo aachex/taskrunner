@@ -31,6 +31,7 @@ func New(name string) *Task {
 	return t
 }
 
+// ExecutionTime возвращает время работы задачи. Если задача выполняется, то время работы пересчитывается как time.Since(task.CreatedAt).
 func (t *Task) ExecutionTime() time.Duration {
 	// если задача не завершена, то пересчитываем время работы
 	if t.status == StatusExecuting {
@@ -53,11 +54,6 @@ func (t *Task) Status() int {
 }
 
 func (t *Task) SetStatus(status int) {
-	// если задача завершена, то фиксируем время завершения
-	if status == StatusCompleted {
-		t.executionTime = time.Since(t.CreatedAt)
-	}
-
 	t.status = status
 	t.StatusText = statuses[status]
 }

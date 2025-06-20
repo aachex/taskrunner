@@ -90,7 +90,7 @@ func (tc *TasksController) runTask(name string) error {
 		t.SetStatus(task.StatusExecuting)
 		defer close(t.Interrupt)
 
-		tc.logger.Debug("creating new task", "name", t.Name, "createdAd", t.CreatedAt, "status", t.StatusText)
+		tc.logger.Debug("creating new task", "name", t.Name, "createdAt", t.CreatedAt, "status", t.StatusText)
 
 		select {
 		case <-t.Interrupt:
@@ -98,7 +98,8 @@ func (tc *TasksController) runTask(name string) error {
 			return
 
 		case <-time.After(time.Minute * time.Duration(rand.Intn(3)+3)):
-			tc.logger.Info("task completed", "name", t.Name)
+			// t.ExecutionTime обновляет время работы, если задача выполняется, и возвращает его, поэтому вызываем здесь для фиксации времени и получения значения
+			tc.logger.Info("task completed", "name", t.Name, "executionTime", t.ExecutionTime())
 			t.SetStatus(task.StatusCompleted)
 		}
 	}()
