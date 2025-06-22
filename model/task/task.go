@@ -1,16 +1,22 @@
 package task
 
-import "time"
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
 
 const (
-	StatusAwaiting  = "awaiting"
-	StatusExecuting = "executing"
-	StatusCompleted = "completed"
+	StatusAwaiting    = "awaiting"
+	StatusExecuting   = "executing"
+	StatusCompleted   = "completed"
+	StatusInterrupted = "interrupted"
 )
 
 type Task struct {
 	Name      string    `json:"task_name"`
 	CreatedAt time.Time `json:"created_at"`
+
 	Interrupt chan struct{}
 
 	executionTime time.Duration
@@ -26,6 +32,24 @@ func New(name string) *Task {
 	}
 
 	return t
+}
+
+func (t *Task) Run() {
+	t.status = StatusExecuting
+
+	defer close(t.Interrupt)
+
+	select {
+	case <-t.Interrupt:
+		fmt.Printf("%s interrupted\n", t.Name)
+		t.status = StatusInterrupted
+		return
+
+	case <-time.After(time.Minute * time.Duration(rand.Intn(3)+3)):
+		fmt.Printf("%s completed\n", t.Name)
+		t.ExecutionTime() // фиксируем итоговое время работы
+		t.status = StatusCompleted
+	}
 }
 
 // ExecutionTime возвращает время работы задачи. Если задача выполняется, то время работы пересчитывается как time.Since(task.CreatedAt).
@@ -48,8 +72,4 @@ func (t *Task) Dto() Dto {
 
 func (t *Task) Status() string {
 	return t.status
-}
-
-func (t *Task) SetStatus(status string) {
-	t.status = status
 }

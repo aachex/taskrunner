@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/aachex/taskrunner/model/task"
 )
@@ -88,21 +86,17 @@ func (tc *TasksController) runTask(name string) error {
 		tc.tasks[name] = task.New(name)
 		t := tc.tasks[name]
 
-		t.SetStatus(task.StatusExecuting)
-		defer close(t.Interrupt)
+		tc.logger.Debug("running new task", "name", t.Name, "createdAt", t.CreatedAt, "status", t.Status())
+		t.Run()
 
-		tc.logger.Debug("creating new task", "name", t.Name, "createdAt", t.CreatedAt, "status", t.Status())
-
-		select {
-		case <-t.Interrupt:
-			tc.logger.Info("task interrupted", "name", t.Name)
+		switch t.Status() {
+		case task.StatusInterrupted:
+			tc.logger.Info("task interrupted", "name", name)
 			delete(tc.tasks, name)
 			return
 
-		case <-time.After(time.Minute * time.Duration(rand.Intn(3)+3)):
-			// t.ExecutionTime обновляет время работы, если задача выполняется, и возвращает его, поэтому вызываем здесь для фиксации времени и получения значения
-			tc.logger.Info("task completed", "name", t.Name, "executionTime", t.ExecutionTime())
-			t.SetStatus(task.StatusCompleted)
+		case task.StatusCompleted:
+			tc.logger.Info("task completed", "name", name, "execution_time", t.ExecutionTime())
 		}
 	}()
 
